@@ -1101,6 +1101,57 @@ Use `/help` for complete command guide!
             parse_mode='Markdown'
         )
 
+    async def delprefix_command(self, update: Update, context: ContextTypes.DEFAULT_TYPE):
+        """Handle /delprefix command"""
+        await self.load_user_settings(update.effective_user.id)
+        if not context.args:
+            if not self.prefixes:
+                await update.message.reply_text(
+                    "❌ **No prefixes to delete!**\n\n"
+                    "Use `/addprefix PREFIX` to add prefixes first.",
+                    parse_mode='Markdown',
+                    reply_to_message_id=update.message.message_id
+                )
+                return
+            prefix_list = "\n".join([f"{i+1}. `{prefix}`" for i, prefix in enumerate(self.prefixes)])
+            await update.message.reply_text(
+                f"➖ **Delete Prefix**\n\n"
+                f"**Usage:** `/delprefix INDEX_NUMBER`\n\n"
+                f"**Current prefixes:**\n{prefix_list}\n\n"
+                f"**Example:** `/delprefix 3` (deletes 3rd prefix)",
+                parse_mode='Markdown',
+                reply_to_message_id=update.message.message_id
+            )
+            return
+        try:
+            index = int(context.args[0]) - 1  # Convert to 0-based index
+            if index < 0 or index >= len(self.prefixes):
+                await update.message.reply_text(
+                    f"❌ **Invalid index!**\n\n"
+                    f"**Valid range:** 1 to {len(self.prefixes)}\n"
+                    f"**You entered:** {index + 1}",
+                    parse_mode='Markdown',
+                    reply_to_message_id=update.message.message_id
+                )
+                return
+            deleted_prefix = self.prefixes.pop(index)
+            await self.save_user_settings(update.effective_user.id)
+            await update.message.reply_text(
+                f"✅ **Prefix deleted successfully!**\n\n"
+                f"**Deleted:** `{deleted_prefix}`\n"
+                f"**Remaining:** {len(self.prefixes)} prefixes",
+                parse_mode='Markdown',
+                reply_to_message_id=update.message.message_id
+            )
+        except ValueError:
+            await update.message.reply_text(
+                f"❌ **Invalid number!**\n\n"
+                "Please enter a valid number.\n"
+                "**Example:** `/delprefix 2`",
+                parse_mode='Markdown',
+                reply_to_message_id=update.message.message_id
+            )
+
     async def dumpchannel_command(self, update: Update, context: ContextTypes.DEFAULT_TYPE):
         """Set dump channel"""
         user_id = update.effective_user.id
@@ -1453,6 +1504,7 @@ def main():
     application.add_handler(CommandHandler("name", bot.name_command))
     application.add_handler(CommandHandler("format", bot.format_command))
     application.add_handler(CommandHandler("addprefix", bot.addprefix_command))
+    application.add_handler(CommandHandler("delprefix", self.delprefix_command))
     application.add_handler(CommandHandler("prefixlist", bot.prefixlist_command))
     application.add_handler(CommandHandler("dumpchannel", bot.dumpchannel_command))
     application.add_handler(CommandHandler("sequence", bot.sequence_command))
