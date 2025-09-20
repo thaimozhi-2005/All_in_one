@@ -1263,23 +1263,23 @@ Use `/help` for complete command guide!
         formatted_caption = self.parse_caption(original_caption, user_id)
         
         if formatted_caption and formatted_caption != original_caption:
-        logger.info(f"Formatted caption: {formatted_caption}")
+            logger.info(f"Formatted caption: {formatted_caption}")
         
-        # Reply with the formatted caption
-        await message.reply_text(
-            f"\n`{formatted_caption}`\n\n",
-            parse_mode='Markdown',
-            reply_to_message_id=message.message_id
-        )
+            # Reply with the formatted caption
+            await message.reply_text(
+                f"\n`{formatted_caption}`\n\n",
+                parse_mode='Markdown',
+                reply_to_message_id=message.message_id
+            )
         else:
-        await message.reply_text(
-            "❌ **Parsing Failed**\n\n"
-            "Could not parse the caption format.\n"
-            "Try `/format YOUR_TEXT` to test or `/help` for supported formats.",
-            parse_mode='Markdown',
-            reply_to_message_id=message.message_id
-        )
-            
+            await message.reply_text(
+                "❌ **Parsing Failed**\n\n"
+                "Could not parse the caption format.\n"
+                "Try `/format YOUR_TEXT` to test or `/help` for supported formats.",
+                parse_mode='Markdown',
+                reply_to_message_id=message.message_id
+            )
+                
             username = update.effective_user.username or "Unknown"
             await self.log_action(context, user_id, username, "Caption formatted", original_caption[:50])
             await self.save_user_settings(user_id)
