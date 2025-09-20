@@ -908,6 +908,50 @@ Use `/help` for complete command guide!
 
     # BULK UPLOAD COMMANDS
 
+    async def delete_episode_command(self, update: Update, context: ContextTypes.DEFAULT_TYPE):
+        """Delete specific episode"""
+        if update.effective_user.id not in self.authorized_admins:
+            await update.message.reply_text("❌ Admin access required")
+            return
+
+        if len(context.args) < 2:
+            await update.message.reply_text("Usage: /delete <anime_id> <episode_id>")
+            return
+
+        if not self.db_pool:
+            await update.message.reply_text("❌ Database not initialized")
+            return
+
+        try:
+            anime_id = int(context.args[0])
+            episode_id = int(context.args[1])
+
+            async with self.db_pool.acquire() as conn:
+                episode = await conn.fetchrow("""
+                    SELECT e.*, a.anime_name
+                    FROM episodes e
+                    JOIN anime a ON e.anime_id = a.anime_id
+                    WHERE e.anime_id = $1 AND e.id = $2
+                """, anime_id, episode_id)
+
+                if not episode:
+                    await update.message.reply_text(f"❌ Episode not found (Anime ID: {anime_id}, Episode ID: {episode_id})")
+                    return
+
+                await conn.execute("DELETE FROM episodes WHERE id = $1", episode_id)
+
+                await update.message.reply_text(
+                    f"✅ **Deleted Episode:**\n"
+                    f"• Anime: {episode['anime_name']}\n"
+                    f"• Episode: [{episode['episode']}] [{episode['quality']}]\n"
+                    f"• File: {episode['file_name']}"
+                )
+        except ValueError:
+            await update.message.reply_text("❌ Invalid ID format. Both must be numbers.")
+        except Exception as e:
+            await update.message.reply_text(f"❌ Error: {e}")
+            
+
     async def anime_list_command(self, update: Update, context: ContextTypes.DEFAULT_TYPE):
         """Show all anime with IDs"""
         if not self.db_pool:
@@ -1447,6 +1491,7 @@ async def setup_bot_commands(application):
         BotCommand("name", "📝 Set/view anime name"),
         BotCommand("format", "🔧 Test caption formatting"),
         BotCommand("addprefix", "➕ Add new prefix"),
+        BotCommand("delprefix", "❌ delete a prefix"),
         BotCommand("prefixlist", "📋 Show all prefixes"),
         BotCommand("dumpchannel", "📤 Set dump channel"),
         
@@ -1455,6 +1500,7 @@ async def setup_bot_commands(application):
         BotCommand("endsequence", "✅ Sort and send files"),
         
         # Bulk upload management
+        BotCommand("delete", "⛔ delete anime with IDs"),
         BotCommand("anime_list", "📺 Show all anime with IDs"),
         BotCommand("list", "📋 List episodes for anime"),
         BotCommand("stats", "📊 Database statistics"),
@@ -1509,6 +1555,7 @@ def main():
     application.add_handler(CommandHandler("dumpchannel", bot.dumpchannel_command))
     application.add_handler(CommandHandler("sequence", bot.sequence_command))
     application.add_handler(CommandHandler("endsequence", bot.endsequence_command))
+    application.add_handler(CommandHandler("delete", bot.delete_episode_command))
     application.add_handler(CommandHandler("anime_list", bot.anime_list_command))
     application.add_handler(CommandHandler("list", bot.list_episodes_command))
     application.add_handler(CommandHandler("stats", bot.stats_command))
