@@ -1,4 +1,6 @@
 # Unified Anime Bot - Python Dependencies for Render
+# Updated for Python 3.13 compatibility
+
 # Core Telegram Bot Framework
 python-telegram-bot==20.7
 
@@ -9,8 +11,8 @@ asyncpg==0.29.0
 fastapi==0.104.1
 uvicorn[standard]==0.24.0
 
-# Data Processing
-pandas==2.1.4
+# Data Processing - Updated for Python 3.13 compatibility
+pandas>=2.2.0
 openpyxl==3.1.2
 
 # Environment Variables
@@ -18,12 +20,6 @@ python-dotenv==1.0.0
 
 # HTTP Client
 httpx==0.25.2
-
-# Async Support
-asyncio-mqtt==0.16.1
-
-# Logging and Monitoring
-structlog==23.2.0
 
 # Date/Time Handling
 python-dateutil==2.8.2
@@ -36,3 +32,6 @@ cryptography==41.0.8
 
 # Type Hints
 typing-extensions==4.8.0
+
+# Additional dependencies for stability
+numpy>=1.24.0
