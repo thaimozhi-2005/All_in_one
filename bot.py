@@ -319,19 +319,18 @@ class UnifiedAnimeBot:
         """Save user-specific settings to database"""
         if not self.db_pool:
             return
-            
+    
         try:
             async with self.db_pool.acquire() as conn:
                 await conn.execute("""
                     INSERT INTO user_settings (user_id, dump_channel, fixed_anime_name, prefixes)
                     VALUES ($1, $2, $3, $4)
-                    ON CONFLICT (user_id) 
-                    DO UPDATE SET 
+                    ON CONFLICT (user_id)
+                    DO UPDATE SET
                         dump_channel = $2,
                         fixed_anime_name = $3,
-                        prefixes = $4,
-                        updated_at = CURRENT_TIMESTAMP
-                """, user_id, 
+                        prefixes = $4
+                """, user_id,
                     self.dump_channels.get(user_id, ""),
                     self.fixed_anime_name,
                     json.dumps(self.prefixes)
@@ -1246,7 +1245,7 @@ Use `/help` for complete command guide!
 
     async def handle_media_with_caption(self, update: Update, context: ContextTypes.DEFAULT_TYPE):
         """Handle media messages with captions for formatting or sequencing"""
-        user_id = update.effective_user.id
+        user_id = update.effective_user.id  # Line 1249 in bot.py
         message = update.message
         original_caption = message.caption
         
@@ -1264,12 +1263,22 @@ Use `/help` for complete command guide!
         formatted_caption = self.parse_caption(original_caption, user_id)
         
         if formatted_caption and formatted_caption != original_caption:
-            # Send to dump channel if configured
-            if user_id in self.dump_channels:
-                await self.send_to_dump_channel(context, user_id, message, formatted_caption)
-            
-            response_text = f"**Formatted Caption:**\n`{formatted_caption}`"
-            await message.reply_text(response_text, parse_mode='Markdown')
+        logger.info(f"Formatted caption: {formatted_caption}")
+        
+        # Reply with the formatted caption
+        await message.reply_text(
+            f"\n`{formatted_caption}`\n\n",
+            parse_mode='Markdown',
+            reply_to_message_id=message.message_id
+        )
+        else:
+        await message.reply_text(
+            "❌ **Parsing Failed**\n\n"
+            "Could not parse the caption format.\n"
+            "Try `/format YOUR_TEXT` to test or `/help` for supported formats.",
+            parse_mode='Markdown',
+            reply_to_message_id=message.message_id
+        )
             
             username = update.effective_user.username or "Unknown"
             await self.log_action(context, user_id, username, "Caption formatted", original_caption[:50])
