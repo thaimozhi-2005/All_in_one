@@ -1407,36 +1407,36 @@ def main():
     """Main function for Render deployment"""
     # Get environment variables
     BOT_TOKEN = os.getenv("TELEGRAM_BOT_TOKEN")
-    PORT = int(os.getenv("PORT", 8000))
-    
+    PORT = int(os.getenv("PORT", 10000))  # Default to 10000
+
     if not BOT_TOKEN:
         logger.error("TELEGRAM_BOT_TOKEN environment variable is required")
         return
-    
+
     # Validate database URL
     DATABASE_URL = os.getenv("DATABASE_URL")
     if not DATABASE_URL:
         logger.error("DATABASE_URL environment variable is required")
         return
-    
+
     logger.info("Starting Unified Anime Bot...")
     logger.info(f"Port: {PORT}")
-    
+
     # Initialize bot
     bot = UnifiedAnimeBot()
-    
+
     # Create application
     application = Application.builder().token(BOT_TOKEN).build()
-    
+
     async def initialize_bot():
         """Initialize bot and database"""
         if not await bot.init_database():
             logger.error("Failed to initialize database")
             return False
-        
+
         await setup_bot_commands(application)
         return True
-    
+
     # Add all handlers
     application.add_handler(CommandHandler("start", bot.start_command))
     application.add_handler(CommandHandler("help", bot.help_command))
@@ -1453,7 +1453,7 @@ def main():
     application.add_handler(CommandHandler("stats", bot.stats_command))
     application.add_handler(CommandHandler("clear_db", bot.clear_db_command))
     application.add_handler(CallbackQueryHandler(bot.handle_clear_db_callback))
-    
+
     # Media handlers
     application.add_handler(MessageHandler(
         filters.Document.ALL & filters.CAPTION,
@@ -1467,13 +1467,13 @@ def main():
         filters.PHOTO & filters.CAPTION,
         bot.handle_media_with_caption
     ))
-    
-    # Text message handler (for bulk uploads and caption testing)
+
+    # Text message handler
     application.add_handler(MessageHandler(
         filters.TEXT & ~filters.COMMAND,
         bot.handle_text_message
     ))
-    
+
     async def startup():
         """Startup function for Render"""
         logger.info("Initializing unified anime bot...")
@@ -1489,34 +1489,37 @@ def main():
             logger.error("Bot initialization failed!")
             return False
         return True
-    
+
     async def run_webhook():
         """Run bot with webhook for Render deployment"""
         try:
             await application.initialize()
-            
+
             if not await startup():
                 logger.error("Startup failed, exiting...")
                 return
-            
+
             await application.start()
-            
-            # Render provides HTTPS automatically, so we use webhook
-            webhook_url = f"https://{os.getenv('RENDER_EXTERNAL_HOSTNAME', 'your-app.onrender.com')}/webhook"
-            
+
+            # Render provides HTTPS automatically
+            webhook_url = f"https://{os.getenv('RENDER_EXTERNAL_HOSTNAME', 'all-in-one-xty5.onrender.com')}/webhook"
             logger.info(f"Setting webhook URL: {webhook_url}")
-            await application.bot.set_webhook(
-                url=webhook_url,
-                allowed_updates=["message", "callback_query"]
-            )
-            
-            # Start webhook server
-            from telegram.ext import WebhookHandler
-            import uvicorn
+            try:
+                await application.bot.set_webhook(
+                    url=webhook_url,
+                    allowed_updates=["message", "callback_query"]
+                )
+                logger.info("Webhook set successfully")
+            except TelegramError as e:
+                logger.error(f"Failed to set webhook: {e}")
+                raise
+
+            # Start FastAPI server
             from fastapi import FastAPI, Request
-            
+            import uvicorn
+
             app = FastAPI(title="Unified Anime Bot")
-            
+
             @app.post("/webhook")
             async def webhook_handler(request: Request):
                 """Handle webhook requests"""
@@ -1527,22 +1530,23 @@ def main():
                 except Exception as e:
                     logger.error(f"Webhook error: {e}")
                     return {"status": "error", "message": str(e)}
-            
+
             @app.get("/health")
             async def health_check():
                 """Health check endpoint for Render"""
+                logger.info("Health check endpoint accessed")
                 return {
                     "status": "healthy",
                     "bot": "Unified Anime Bot",
                     "database": "connected" if bot.db_pool else "disconnected",
                     "features": [
                         "Caption Formatting",
-                        "File Sequencing", 
+                        "File Sequencing",
                         "Bulk Upload Processing",
                         "Database Management"
                     ]
                 }
-            
+
             @app.get("/")
             async def root():
                 """Root endpoint"""
@@ -1551,7 +1555,7 @@ def main():
                     "status": "active",
                     "platform": "Render"
                 }
-            
+
             # Run FastAPI server
             config = uvicorn.Config(
                 app=app,
@@ -1560,49 +1564,47 @@ def main():
                 log_level="info"
             )
             server = uvicorn.Server(config)
-            
-            logger.info(f"Starting webhook server on port {PORT}")
+
+            logger.info(f"Starting webhook server on 0.0.0.0:{PORT}")
             await server.serve()
-            
+
         except Exception as e:
             logger.error(f"Webhook setup failed: {e}")
-            # Fallback to polling if webhook fails
-            logger.info("Falling back to polling mode...")
-            await run_polling()
-    
+            raise  # Re-raise to debug instead of falling back to polling
+
     async def run_polling():
         """Run bot with polling (fallback mode)"""
         try:
             await application.initialize()
-            
+
             if not await startup():
                 logger.error("Startup failed, exiting...")
                 return
-            
+
             await application.start()
             logger.info("Starting polling mode...")
             await application.updater.start_polling(
                 allowed_updates=["message", "callback_query"],
                 drop_pending_updates=True
             )
-            
+
             # Keep the bot running
             import signal
             import threading
-            
+
             stop_event = threading.Event()
-            
+
             def signal_handler(signum, frame):
                 logger.info(f"Received signal {signum}, stopping bot...")
                 stop_event.set()
-            
+
             signal.signal(signal.SIGTERM, signal_handler)
             signal.signal(signal.SIGINT, signal_handler)
-            
+
             # Wait for stop signal
             while not stop_event.is_set():
                 await asyncio.sleep(1)
-            
+
         except Exception as e:
             logger.error(f"Polling error: {e}")
         finally:
@@ -1613,16 +1615,11 @@ def main():
             if bot.db_pool:
                 await bot.db_pool.close()
                 logger.info("Database connections closed")
-    
+
     # Check if we're running on Render
     if os.getenv('RENDER'):
         logger.info("Running on Render platform with webhook")
-        try:
-            asyncio.run(run_webhook())
-        except Exception as e:
-            logger.error(f"Webhook mode failed: {e}")
-            logger.info("Trying polling mode as fallback...")
-            asyncio.run(run_polling())
+        asyncio.run(run_webhook())
     else:
         logger.info("Running in local/polling mode")
         asyncio.run(run_polling())
