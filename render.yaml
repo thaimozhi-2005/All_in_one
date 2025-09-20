@@ -1,0 +1,39 @@
+# Unified Anime Bot - Render Service Configuration
+services:
+  - type: web
+    name: unified-anime-bot
+    env: python
+    plan: starter  # Use 'starter' for free tier, upgrade to 'standard' for production
+    buildCommand: pip install -r requirements.txt
+    startCommand: python unified_anime_bot.py
+    
+    # Environment Variables
+    envVars:
+      - key: TELEGRAM_BOT_TOKEN
+        sync: false  # Set manually in Render dashboard
+      - key: DATABASE_URL
+        sync: false  # Set manually or connect to Render PostgreSQL
+      - key: ADMIN_IDS
+        sync: false
+      - key: LOG_CHANNEL_ID
+        sync: false
+      - key: ENVIRONMENT
+        value: production
+      - key: PORT
+        value: 8000
+    
+    # Health Check
+    healthCheckPath: /health
+    
+    # Auto-deploy settings
+    autoDeploy: true
+    
+    # Scaling settings
+    numInstances: 1
+    
+  # Optional: Add PostgreSQL database service
+  - type: pserv
+    name: unified-anime-bot-db
+    env: postgresql
+    plan: starter  # Free PostgreSQL instance
+    # The DATABASE_URL will be automatically provided to your web service
