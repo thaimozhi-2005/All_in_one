@@ -1504,7 +1504,7 @@ def main():
     application.add_handler(CommandHandler("name", bot.name_command))
     application.add_handler(CommandHandler("format", bot.format_command))
     application.add_handler(CommandHandler("addprefix", bot.addprefix_command))
-    application.add_handler(CommandHandler("delprefix", self.delprefix_command))
+    application.add_handler(CommandHandler("delprefix", bot.delprefix_command))
     application.add_handler(CommandHandler("prefixlist", bot.prefixlist_command))
     application.add_handler(CommandHandler("dumpchannel", bot.dumpchannel_command))
     application.add_handler(CommandHandler("sequence", bot.sequence_command))
