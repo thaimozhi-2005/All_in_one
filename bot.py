@@ -942,231 +942,231 @@ Use `/help` for complete command guide!
             await update.message.reply_text(f"❌ Error: {e}")
             
     async def search_url(self, update: Update, context: ContextTypes.DEFAULT_TYPE):
-    """Search for episode URLs by anime_id, optional season, quality, episode parsed from url"""
-    logger.info("Entered search_url")
+        """Search for episode URLs by anime_id, optional season, quality, episode parsed from url"""
+        logger.info("Entered search_url")
+        
+        if not update.effective_user:
+            logger.warning("Received /search command with no effective user")
+            return
+        
+        args = context.args
+        logger.info(f"Args received: {args}")
+        
+        if len(args) < 1:
+            await update.message.reply_text(
+                "Usage: /search <anime_id> [season] [quality] [episode]\n\n"
+                "Examples:\n"
+                "• /search 1 (all episodes for anime_id 1)\n"
+                "• /search 1 01 480 (season 01, quality 480p)\n"
+                "• /search 1 01 480 11 (season 01, episode 11, quality 480p)"
+            )
+            return
+        
+        if not self.db_pool:
+            logger.error("Database pool not initialized")
+            await update.message.reply_text("❌ Database not initialized")
+            return
     
-    if not update.effective_user:
-        logger.warning("Received /search command with no effective user")
-        return
+        def parse_video_filename(url_or_filename):
+            """Parse video filename to extract season, episode, quality, and title information"""
+            try:
+                # Fix: Use urllib.parse instead of just urllib
+                if url_or_filename.startswith('http'):
+                    decoded_url = urllib.parse.unquote(url_or_filename)
+                    filename = decoded_url.split('/')[-1].split('?')[0]
+                else:
+                    filename = url_or_filename
     
-    args = context.args
-    logger.info(f"Args received: {args}")
+                result = {
+                    'season': None,
+                    'episode': None,
+                    'quality': None,
+                    'title': None,
+                    'language': None,
+                    'format_type': None,
+                    'file_extension': None
+                }
     
-    if len(args) < 1:
-        await update.message.reply_text(
-            "Usage: /search <anime_id> [season] [quality] [episode]\n\n"
-            "Examples:\n"
-            "• /search 1 (all episodes for anime_id 1)\n"
-            "• /search 1 01 480 (season 01, quality 480p)\n"
-            "• /search 1 01 480 11 (season 01, episode 11, quality 480p)"
-        )
-        return
+                if '.' in filename:
+                    result['file_extension'] = filename.split('.')[-1]
     
-    if not self.db_pool:
-        logger.error("Database pool not initialized")
-        await update.message.reply_text("❌ Database not initialized")
-        return
-
-    def parse_video_filename(url_or_filename):
-        """Parse video filename to extract season, episode, quality, and title information"""
+                # Season and Episode extraction
+                season_episode_patterns = [
+                    r'S(\d+)-E(\d+)',
+                    r'S(\d+)E(\d+)', 
+                    r'Season\s*(\d+)\s*Episode\s*(\d+)',
+                    r'(\d+)x(\d+)',
+                ]
+                
+                for pattern in season_episode_patterns:
+                    match = re.search(pattern, filename, re.IGNORECASE)
+                    if match:
+                        result['season'] = int(match.group(1))
+                        result['episode'] = int(match.group(2))
+                        break
+    
+                # Quality extraction
+                quality_patterns = [
+                    r'\[(\d+p?)\]',
+                    r'(\d{3,4}p)',
+                    r'(\d{3,4})',
+                ]
+                
+                qualities_found = []
+                for pattern in quality_patterns:
+                    matches = re.findall(pattern, filename, re.IGNORECASE)
+                    for match in matches:
+                        clean_quality = re.sub(r'[^\d]', '', match)
+                        if clean_quality and len(clean_quality) >= 3:
+                            qualities_found.append(f"{clean_quality}p")
+                
+                if qualities_found:
+                    result['quality'] = qualities_found[0]
+    
+                # Language extraction
+                language_patterns = [
+                    r'\b(Tam|Tamil|Tel|Telugu|Hin|Hindi|Eng|English|Mal|Malayalam|Kan|Kannada)\b'
+                ]
+                
+                for pattern in language_patterns:
+                    match = re.search(pattern, filename, re.IGNORECASE)
+                    if match:
+                        lang_code = match.group(1).lower()
+                        lang_map = {
+                            'tam': 'Tamil', 'tamil': 'Tamil',
+                            'tel': 'Telugu', 'telugu': 'Telugu', 
+                            'hin': 'Hindi', 'hindi': 'Hindi',
+                            'eng': 'English', 'english': 'English',
+                            'mal': 'Malayalam', 'malayalam': 'Malayalam',
+                            'kan': 'Kannada', 'kannada': 'Kannada'
+                        }
+                        result['language'] = lang_map.get(lang_code, match.group(1))
+                        break
+    
+                # Format type extraction
+                format_patterns = [
+                    r'\[(Single|Dual|Multi)\]',
+                    r'\b(Single|Dual|Multi)\b'
+                ]
+                
+                for pattern in format_patterns:
+                    match = re.search(pattern, filename, re.IGNORECASE)
+                    if match:
+                        result['format_type'] = match.group(1).title()
+                        break
+    
+                # Title extraction
+                title = filename
+                title = re.sub(r'\[\d+p?\]', '', title, flags=re.IGNORECASE)
+                title = re.sub(r'\[S\d+-E\d+\]', '', title, flags=re.IGNORECASE)
+                title = re.sub(r'S\d+E\d+', '', title, flags=re.IGNORECASE)
+                title = re.sub(r'\[(Single|Dual|Multi|Tam|Tamil|Tel|Telugu|Hin|Hindi|Eng|English)\]', '', title, flags=re.IGNORECASE)
+                title = re.sub(r'\.\w+$', '', title)
+                title = re.sub(r'[_\-\.]+', ' ', title)
+                title = re.sub(r'\s+', ' ', title).strip()
+                title = re.sub(r'^[\[\]\-_\s]+|[\[\]\-_\s]+$', '', title)
+                
+                if title:
+                    result['title'] = title
+    
+                return result
+                
+            except Exception as e:
+                logger.error(f"Error parsing filename: {e}")
+                return {
+                    'season': None, 'episode': None, 'quality': None,
+                    'title': None, 'language': None, 'format_type': None,
+                    'file_extension': None
+                }
+    
         try:
-            # Fix: Use urllib.parse instead of just urllib
-            if url_or_filename.startswith('http'):
-                decoded_url = urllib.parse.unquote(url_or_filename)
-                filename = decoded_url.split('/')[-1].split('?')[0]
-            else:
-                filename = url_or_filename
-
-            result = {
-                'season': None,
-                'episode': None,
-                'quality': None,
-                'title': None,
-                'language': None,
-                'format_type': None,
-                'file_extension': None
-            }
-
-            if '.' in filename:
-                result['file_extension'] = filename.split('.')[-1]
-
-            # Season and Episode extraction
-            season_episode_patterns = [
-                r'S(\d+)-E(\d+)',
-                r'S(\d+)E(\d+)', 
-                r'Season\s*(\d+)\s*Episode\s*(\d+)',
-                r'(\d+)x(\d+)',
-            ]
+            anime_id = int(args[0])
+            season = args[1] if len(args) > 1 else None
+            quality = args[2] if len(args) > 2 else None
+            episode = args[3] if len(args) > 3 else None
             
-            for pattern in season_episode_patterns:
-                match = re.search(pattern, filename, re.IGNORECASE)
+            logger.info(f"Query params: anime_id={anime_id}, season={season}, quality={quality}, episode={episode}")
+    
+            async with self.db_pool.acquire() as conn:
+                rows = await conn.fetch("SELECT url FROM episodes WHERE anime_id = $1", anime_id)
+                logger.info(f"Query returned {len(rows)} rows initially")
+    
+            if not rows:
+                logger.info("No episodes found")
+                await update.message.reply_text("No episodes found matching the criteria.")
+                return
+    
+            # Filter and parse URLs
+            filtered_rows = []
+            for row in rows:
+                parsed = parse_video_filename(row['url'])
+                match = True
+                
+                if season and parsed['season'] != int(season):
+                    match = False
+                if episode and parsed['episode'] != int(episode):
+                    match = False
+                if quality and parsed['quality'] and parsed['quality'].lower() != f"{quality.lower()}p":
+                    match = False
+                
                 if match:
-                    result['season'] = int(match.group(1))
-                    result['episode'] = int(match.group(2))
-                    break
-
-            # Quality extraction
-            quality_patterns = [
-                r'\[(\d+p?)\]',
-                r'(\d{3,4}p)',
-                r'(\d{3,4})',
-            ]
+                    filtered_rows.append({
+                        'url': row['url'],
+                        'parsed': parsed
+                    })
+    
+            if not filtered_rows:
+                logger.info("No episodes found after filtering")
+                await update.message.reply_text("No episodes found matching the criteria.")
+                return
+    
+            # Sort by episode
+            filtered_rows.sort(key=lambda x: x['parsed']['episode'] or 0)
             
-            qualities_found = []
-            for pattern in quality_patterns:
-                matches = re.findall(pattern, filename, re.IGNORECASE)
-                for match in matches:
-                    clean_quality = re.sub(r'[^\d]', '', match)
-                    if clean_quality and len(clean_quality) >= 3:
-                        qualities_found.append(f"{clean_quality}p")
+            # Build simple response - Just serial number and URL
+            response_lines = []
             
-            if qualities_found:
-                result['quality'] = qualities_found[0]
-
-            # Language extraction
-            language_patterns = [
-                r'\b(Tam|Tamil|Tel|Telugu|Hin|Hindi|Eng|English|Mal|Malayalam|Kan|Kannada)\b'
-            ]
+            for i, row in enumerate(filtered_rows):
+                # Simple format: Serial number) URL only
+                response_lines.append(f"{i+1}) {row['url']}")
             
-            for pattern in language_patterns:
-                match = re.search(pattern, filename, re.IGNORECASE)
-                if match:
-                    lang_code = match.group(1).lower()
-                    lang_map = {
-                        'tam': 'Tamil', 'tamil': 'Tamil',
-                        'tel': 'Telugu', 'telugu': 'Telugu', 
-                        'hin': 'Hindi', 'hindi': 'Hindi',
-                        'eng': 'English', 'english': 'English',
-                        'mal': 'Malayalam', 'malayalam': 'Malayalam',
-                        'kan': 'Kannada', 'kannada': 'Kannada'
-                    }
-                    result['language'] = lang_map.get(lang_code, match.group(1))
-                    break
-
-            # Format type extraction
-            format_patterns = [
-                r'\[(Single|Dual|Multi)\]',
-                r'\b(Single|Dual|Multi)\b'
-            ]
+            response = "\n".join(response_lines)
             
-            for pattern in format_patterns:
-                match = re.search(pattern, filename, re.IGNORECASE)
-                if match:
-                    result['format_type'] = match.group(1).title()
-                    break
-
-            # Title extraction
-            title = filename
-            title = re.sub(r'\[\d+p?\]', '', title, flags=re.IGNORECASE)
-            title = re.sub(r'\[S\d+-E\d+\]', '', title, flags=re.IGNORECASE)
-            title = re.sub(r'S\d+E\d+', '', title, flags=re.IGNORECASE)
-            title = re.sub(r'\[(Single|Dual|Multi|Tam|Tamil|Tel|Telugu|Hin|Hindi|Eng|English)\]', '', title, flags=re.IGNORECASE)
-            title = re.sub(r'\.\w+$', '', title)
-            title = re.sub(r'[_\-\.]+', ' ', title)
-            title = re.sub(r'\s+', ' ', title).strip()
-            title = re.sub(r'^[\[\]\-_\s]+|[\[\]\-_\s]+$', '', title)
-            
-            if title:
-                result['title'] = title
-
-            return result
-            
-        except Exception as e:
-            logger.error(f"Error parsing filename: {e}")
-            return {
-                'season': None, 'episode': None, 'quality': None,
-                'title': None, 'language': None, 'format_type': None,
-                'file_extension': None
-            }
-
-    try:
-        anime_id = int(args[0])
-        season = args[1] if len(args) > 1 else None
-        quality = args[2] if len(args) > 2 else None
-        episode = args[3] if len(args) > 3 else None
-        
-        logger.info(f"Query params: anime_id={anime_id}, season={season}, quality={quality}, episode={episode}")
-
-        async with self.db_pool.acquire() as conn:
-            rows = await conn.fetch("SELECT url FROM episodes WHERE anime_id = $1", anime_id)
-            logger.info(f"Query returned {len(rows)} rows initially")
-
-        if not rows:
-            logger.info("No episodes found")
-            await update.message.reply_text("No episodes found matching the criteria.")
-            return
-
-        # Filter and parse URLs
-        filtered_rows = []
-        for row in rows:
-            parsed = parse_video_filename(row['url'])
-            match = True
-            
-            if season and parsed['season'] != int(season):
-                match = False
-            if episode and parsed['episode'] != int(episode):
-                match = False
-            if quality and parsed['quality'] and parsed['quality'].lower() != f"{quality.lower()}p":
-                match = False
-            
-            if match:
-                filtered_rows.append({
-                    'url': row['url'],
-                    'parsed': parsed
-                })
-
-        if not filtered_rows:
-            logger.info("No episodes found after filtering")
-            await update.message.reply_text("No episodes found matching the criteria.")
-            return
-
-        # Sort by episode
-        filtered_rows.sort(key=lambda x: x['parsed']['episode'] or 0)
-        
-        # Build simple response - Just serial number and URL
-        response_lines = []
-        
-        for i, row in enumerate(filtered_rows):
-            # Simple format: Serial number) URL only
-            response_lines.append(f"{i+1}) {row['url']}")
-        
-        response = "\n".join(response_lines)
-        
-        # Handle long messages
-        if len(response) > 4000:
-            # Split into chunks
-            chunks = []
-            lines = response.split('\n')
-            current_chunk = ""
-            
-            for line in lines:
-                if len(current_chunk + line + '\n') > 4000:
+            # Handle long messages
+            if len(response) > 4000:
+                # Split into chunks
+                chunks = []
+                lines = response.split('\n')
+                current_chunk = ""
+                
+                for line in lines:
+                    if len(current_chunk + line + '\n') > 4000:
+                        chunks.append(current_chunk)
+                        current_chunk = line + '\n'
+                    else:
+                        current_chunk += line + '\n'
+                
+                if current_chunk:
                     chunks.append(current_chunk)
-                    current_chunk = line + '\n'
-                else:
-                    current_chunk += line + '\n'
-            
-            if current_chunk:
-                chunks.append(current_chunk)
-            
-            # Send chunks
-            for i, chunk in enumerate(chunks):
-                if i == 0:
-                    await update.message.reply_text(chunk)
-                else:
-                    await update.message.reply_text(f"Continued ({i+1}/{len(chunks)}):\n\n{chunk}")
-        else:
-            # Send single message - NO parse_mode to avoid entity errors
-            await update.message.reply_text(response)
-            
-        logger.info(f"Successfully sent {len(filtered_rows)} episodes")
-
-    except ValueError as ve:
-        logger.error(f"ValueError: {ve}")
-        await update.message.reply_text("❌ Invalid input format. anime_id must be a number.")
-    except Exception as e:
-        logger.error(f"Error in search_url: {e}", exc_info=True)
-        await update.message.reply_text(f"❌ Error: {str(e)}")
+                
+                # Send chunks
+                for i, chunk in enumerate(chunks):
+                    if i == 0:
+                        await update.message.reply_text(chunk)
+                    else:
+                        await update.message.reply_text(f"Continued ({i+1}/{len(chunks)}):\n\n{chunk}")
+            else:
+                # Send single message - NO parse_mode to avoid entity errors
+                await update.message.reply_text(response)
+                
+            logger.info(f"Successfully sent {len(filtered_rows)} episodes")
+    
+        except ValueError as ve:
+            logger.error(f"ValueError: {ve}")
+            await update.message.reply_text("❌ Invalid input format. anime_id must be a number.")
+        except Exception as e:
+            logger.error(f"Error in search_url: {e}", exc_info=True)
+            await update.message.reply_text(f"❌ Error: {str(e)}")
 
 
     async def search_episodes(self, update: Update, context: ContextTypes.DEFAULT_TYPE):
