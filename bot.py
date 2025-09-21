@@ -549,7 +549,6 @@ class UnifiedAnimeBot:
 🖥️ Deployed on Render Platform
 
 **👋 Welcome {username}!**
-🆔 Your ID: `{user_id}`
 
 **🎬 CAPTION FORMATTING:**
 • Professional quality formatting (480P, 720P, 1080P)
@@ -568,19 +567,6 @@ class UnifiedAnimeBot:
 • Episode tracking and management
 • Export functionality
 
-**🚀 GETTING STARTED:**
-• Send videos/documents with captions for formatting
-• Use `/sequence` to start file sorting
-• Send bulk upload messages for parsing
-• Use `/help` for detailed commands
-
-**🔧 CONFIGURATION:**
-• `/name` - Set fixed anime name
-• `/addprefix` - Add custom prefixes
-• `/dumpchannel` - Set dump channel
-• `/anime_list` - View stored anime
-
-Ready to organize your anime content! 📺
         """
         
         await update.message.reply_text(welcome_message, parse_mode='Markdown')
@@ -618,6 +604,7 @@ Ready to organize your anime content! 📺
 **⚙️ ADMIN COMMANDS:**
 • `/clear_db` - Clear entire database
 • `/set_channel <@channel>` - Set target channel
+• `/search <id S Q>
 • `/status` - Show bot status
 
 **📝 SUPPORTED FORMATS:**
@@ -953,55 +940,63 @@ Use `/help` for complete command guide!
 
     async def search_episodes(self, update: Update, context: ContextTypes.DEFAULT_TYPE):
         """Search for episode URLs by anime_id, season, quality, optional episode"""
+        logger.info("Entered search_episodes")
         if not update.effective_user:
             logger.warning("Received /search command with no effective user (e.g., from a channel)")
             return
-
         args = context.args
-        if len(args) < 3:
+        logger.info(f"Args received: {args}")
+        if len(args) < 3:  # Requires anime_id, season, quality; episode is optional
             await update.message.reply_text(
                 "Usage: /search <anime_id> <season> <quality> [episode]\n\n"
                 "Examples:\n"
                 "• /search 1 01 720P (all episodes in season 01, quality 720P)\n"
-                "• /search 1 01 720P 05 (specific episode 05 in season 01, quality 720P)",
+                "• /search 1 01 720P 05 (episode 05 in season 01, quality 720P)",
                 parse_mode='Markdown'
             )
             return
-
         if not self.db_pool:
+            logger.error("Database pool not initialized")
             await update.message.reply_text("❌ Database not initialized")
             return
-
         try:
             anime_id = int(args[0])
             season = args[1]  # e.g., '01'
             quality = args[2]  # e.g., '720P'
             episode = args[3] if len(args) > 3 else None
-
+            logger.info(f"Query params: anime_id={anime_id}, season={season}, quality={quality}, episode={episode}")
+    
+            # Construct pattern to match season and optional episode
+            season_pattern = f"S{season}-E%"
             if episode:
-                episode_pattern = f"S{season}-E{episode}"
-            else:
-                episode_pattern = f"S{season}-E%"
-
+                season_pattern = f"S{season}-E{episode}"
+    
             async with self.db_pool.acquire() as conn:
                 rows = await conn.fetch("""
                     SELECT url, episode
                     FROM episodes
                     WHERE anime_id = $1
-                    AND episode ILIKE $2
-                    AND quality = $3
-                    ORDER BY CAST(SUBSTRING(episode FROM 'E(\d+)') AS INTEGER) ASC
-                """, anime_id, episode_pattern, quality)
-
+                    AND quality = $2
+                    AND episode ILIKE $3
+                    ORDER BY CAST(
+                        CASE
+                            WHEN episode ~ 'E(\d+)' THEN SUBSTRING(episode FROM 'E(\d+)')
+                            ELSE SUBSTRING(episode FROM '\d+')
+                        END AS INTEGER) ASC
+                """, anime_id, quality, season_pattern)
+                logger.info(f"Query returned {len(rows)} rows")
             if not rows:
+                logger.info("No episodes found")
                 await update.message.reply_text("No episodes found matching the criteria.")
                 return
-
             response = "\n".join(f"{i+1}) {row['url']}" for i, row in enumerate(rows))
-            await update.message.reply_text(response)
-        except ValueError:
+            logger.info(f"Response: {response}")
+            await update.message.reply_text(response, parse_mode=None)
+        except ValueError as ve:
+            logger.error(f"ValueError: {ve}")
             await update.message.reply_text("❌ Invalid input format. anime_id must be a number.")
         except Exception as e:
+            logger.error(f"Error in search_episodes: {e}")
             await update.message.reply_text(f"❌ Error: {str(e)}")
 
     async def anime_list_command(self, update: Update, context: ContextTypes.DEFAULT_TYPE):
@@ -1552,7 +1547,7 @@ async def setup_bot_commands(application):
         BotCommand("endsequence", "✅ Sort and send files"),
         
         # Bulk upload management
-        BotCommand("search", " search anime with IDs S Q"),
+        BotCommand("search", "🔍 Search episodes by anime_id, season, quality [episode]"),
         BotCommand("delete", "⛔ delete anime with IDs"),
         BotCommand("anime_list", "📺 Show all anime with IDs"),
         BotCommand("list", "📋 List episodes for anime"),
