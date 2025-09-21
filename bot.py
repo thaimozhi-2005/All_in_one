@@ -950,7 +950,59 @@ Use `/help` for complete command guide!
             await update.message.reply_text("❌ Invalid ID format. Both must be numbers.")
         except Exception as e:
             await update.message.reply_text(f"❌ Error: {e}")
-            
+
+    async def search_episodes(self, update: Update, context: ContextTypes.DEFAULT_TYPE):
+        """Search for episode URLs by anime_id, season, quality, optional episode"""
+        if not update.effective_user:
+            logger.warning("Received /search command with no effective user (e.g., from a channel)")
+            return
+
+        args = context.args
+        if len(args) < 3:
+            await update.message.reply_text(
+                "Usage: /search <anime_id> <season> <quality> [episode]\n\n"
+                "Examples:\n"
+                "• /search 1 01 720P (all episodes in season 01, quality 720P)\n"
+                "• /search 1 01 720P 05 (specific episode 05 in season 01, quality 720P)",
+                parse_mode='Markdown'
+            )
+            return
+
+        if not self.db_pool:
+            await update.message.reply_text("❌ Database not initialized")
+            return
+
+        try:
+            anime_id = int(args[0])
+            season = args[1]  # e.g., '01'
+            quality = args[2]  # e.g., '720P'
+            episode = args[3] if len(args) > 3 else None
+
+            if episode:
+                episode_pattern = f"S{season}-E{episode}"
+            else:
+                episode_pattern = f"S{season}-E%"
+
+            async with self.db_pool.acquire() as conn:
+                rows = await conn.fetch("""
+                    SELECT url, episode
+                    FROM episodes
+                    WHERE anime_id = $1
+                    AND episode ILIKE $2
+                    AND quality = $3
+                    ORDER BY CAST(SUBSTRING(episode FROM 'E(\d+)') AS INTEGER) ASC
+                """, anime_id, episode_pattern, quality)
+
+            if not rows:
+                await update.message.reply_text("No episodes found matching the criteria.")
+                return
+
+            response = "\n".join(f"{i+1}) {row['url']}" for i, row in enumerate(rows))
+            await update.message.reply_text(response)
+        except ValueError:
+            await update.message.reply_text("❌ Invalid input format. anime_id must be a number.")
+        except Exception as e:
+            await update.message.reply_text(f"❌ Error: {str(e)}")
 
     async def anime_list_command(self, update: Update, context: ContextTypes.DEFAULT_TYPE):
         """Show all anime with IDs"""
@@ -1500,6 +1552,7 @@ async def setup_bot_commands(application):
         BotCommand("endsequence", "✅ Sort and send files"),
         
         # Bulk upload management
+        BotCommand("search", " search anime with IDs S Q"),
         BotCommand("delete", "⛔ delete anime with IDs"),
         BotCommand("anime_list", "📺 Show all anime with IDs"),
         BotCommand("list", "📋 List episodes for anime"),
@@ -1555,6 +1608,7 @@ def main():
     application.add_handler(CommandHandler("dumpchannel", bot.dumpchannel_command))
     application.add_handler(CommandHandler("sequence", bot.sequence_command))
     application.add_handler(CommandHandler("endsequence", bot.endsequence_command))
+    application.add_handler(CommandHandler("search", bot.search_episodes))
     application.add_handler(CommandHandler("delete", bot.delete_episode_command))
     application.add_handler(CommandHandler("anime_list", bot.anime_list_command))
     application.add_handler(CommandHandler("list", bot.list_episodes_command))
