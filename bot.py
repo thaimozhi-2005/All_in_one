@@ -939,7 +939,7 @@ Use `/help` for complete command guide!
             await update.message.reply_text(f"❌ Error: {e}")
 
     async def search_episodes(self, update: Update, context: ContextTypes.DEFAULT_TYPE):
-        """Search for episode URLs by anime_id, season, quality, optional episode"""
+        """Search for episode URLs by anime_id, season, quality, optional episode using file_name"""
         logger.info("Entered search_episodes")
         if not update.effective_user:
             logger.warning("Received /search command with no effective user (e.g., from a channel)")
@@ -966,25 +966,25 @@ Use `/help` for complete command guide!
             episode = args[3] if len(args) > 3 else None
             logger.info(f"Query params: anime_id={anime_id}, season={season}, quality={quality}, episode={episode}")
     
-            # Construct pattern to match season and optional episode
-            season_pattern = f"S{season}-E%"
+            # Construct pattern to match season and optional episode in file_name
+            season_pattern = f"%S{season}E%"
             if episode:
-                season_pattern = f"S{season}-E{episode}"
+                season_pattern = f"%S{season}E{episode}%"
     
             async with self.db_pool.acquire() as conn:
                 rows = await conn.fetch("""
-                    SELECT url, episode
+                    SELECT url, file_name
                     FROM episodes
                     WHERE anime_id = $1
                     AND quality = $2
-                    AND episode ILIKE $3
+                    AND file_name ILIKE $3
                     ORDER BY CAST(
                         CASE
-                            WHEN episode ~ 'E(\d+)' THEN SUBSTRING(episode FROM 'E(\d+)')
-                            ELSE SUBSTRING(episode FROM '\d+')
+                            WHEN file_name ~ 'E(\d+)' THEN SUBSTRING(file_name FROM 'E(\d+)')
+                            ELSE SUBSTRING(file_name FROM '\d+')
                         END AS INTEGER) ASC
                 """, anime_id, quality, season_pattern)
-                logger.info(f"Query returned {len(rows)} rows")
+                logger.info(f"Query returned {len(rows)} rows: {[row['file_name'] for row in rows]}")
             if not rows:
                 logger.info("No episodes found")
                 await update.message.reply_text("No episodes found matching the criteria.")
@@ -996,7 +996,7 @@ Use `/help` for complete command guide!
             logger.error(f"ValueError: {ve}")
             await update.message.reply_text("❌ Invalid input format. anime_id must be a number.")
         except Exception as e:
-            logger.error(f"Error in search_episodes: {e}")
+            logger.error(f"Error in search_episodes: {e}", exc_info=True)
             await update.message.reply_text(f"❌ Error: {str(e)}")
 
     async def anime_list_command(self, update: Update, context: ContextTypes.DEFAULT_TYPE):
