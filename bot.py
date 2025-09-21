@@ -944,39 +944,34 @@ Use `/help` for complete command guide!
 
     async def search_episodes(self, update: Update, context: ContextTypes.DEFAULT_TYPE):
         """Search for episode URLs by anime_id, optional season, quality, episode parsed from url"""
-        logger.info("🔍 Entered search_episodes")
+        logger.info("Entered search_episodes")
         
         if not update.effective_user:
-            logger.warning("❌ Received /search command with no effective user (e.g., from a channel)")
+            logger.warning("Received /search command with no effective user")
             return
         
         args = context.args
-        logger.info(f"📝 Args received: {args}")
+        logger.info(f"Args received: {args}")
         
-        if len(args) < 1:  # Requires at least anime_id
+        if len(args) < 1:
             await update.message.reply_text(
-                "🔍 **Usage:** `/search <anime_id> [season] [quality] [episode]`\n\n"
-                "**Examples:**\n"
-                "• `/search 1` (all episodes for anime_id 1)\n"
-                "• `/search 1 01 480` (season 01, quality 480p)\n"
-                "• `/search 1 01 480 11` (season 01, episode 11, quality 480p)\n\n"
-                "**Parameters:**\n"
-                "• `anime_id` - Required anime ID number\n"
-                "• `season` - Optional season number (01, 02, etc.)\n"
-                "• `quality` - Optional quality (480, 720, 1080)\n"
-                "• `episode` - Optional episode number",
-                parse_mode='Markdown'
+                "Usage: /search <anime_id> [season] [quality] [episode]\n\n"
+                "Examples:\n"
+                "• /search 1 (all episodes for anime_id 1)\n"
+                "• /search 1 01 480 (season 01, quality 480p)\n"
+                "• /search 1 01 480 11 (season 01, episode 11, quality 480p)"
             )
             return
         
         if not self.db_pool:
-            logger.error("❌ Database pool not initialized")
+            logger.error("Database pool not initialized")
             await update.message.reply_text("❌ Database not initialized")
             return
     
         def parse_video_filename(url_or_filename):
             """Parse video filename to extract season, episode, quality, and title information"""
             try:
+                # Fix: Use urllib.parse instead of just urllib
                 if url_or_filename.startswith('http'):
                     decoded_url = urllib.parse.unquote(url_or_filename)
                     filename = decoded_url.split('/')[-1].split('?')[0]
@@ -990,8 +985,7 @@ Use `/help` for complete command guide!
                     'title': None,
                     'language': None,
                     'format_type': None,
-                    'file_extension': None,
-                    'raw_filename': filename
+                    'file_extension': None
                 }
     
                 if '.' in filename:
@@ -999,30 +993,24 @@ Use `/help` for complete command guide!
     
                 # Season and Episode extraction
                 season_episode_patterns = [
-                    r'S(\d+)-E(\d+)',           # S01-E11
-                    r'S(\d+)E(\d+)',            # S01E11
-                    r'Season\s*(\d+)\s*Episode\s*(\d+)', # Season 1 Episode 11
-                    r'(\d+)x(\d+)',             # 1x11
-                    r'E(\d+)',                  # Just episode E11 (assume season 1)
-                    r'Episode\s*(\d+)',         # Episode 11
+                    r'S(\d+)-E(\d+)',
+                    r'S(\d+)E(\d+)', 
+                    r'Season\s*(\d+)\s*Episode\s*(\d+)',
+                    r'(\d+)x(\d+)',
                 ]
                 
                 for pattern in season_episode_patterns:
                     match = re.search(pattern, filename, re.IGNORECASE)
                     if match:
-                        if len(match.groups()) == 2:  # Season and Episode
-                            result['season'] = int(match.group(1))
-                            result['episode'] = int(match.group(2))
-                        else:  # Just Episode
-                            result['season'] = 1  # Default season
-                            result['episode'] = int(match.group(1))
+                        result['season'] = int(match.group(1))
+                        result['episode'] = int(match.group(2))
                         break
     
                 # Quality extraction
                 quality_patterns = [
-                    r'\[(\d+p?)\]',  # [480], [720p], [1080p]
-                    r'(\d{3,4}p)',   # 480p, 720p, 1080p, 2160p
-                    r'(\d{3,4})(?=\D|$)',    # 480, 720, 1080 (not part of larger number)
+                    r'\[(\d+p?)\]',
+                    r'(\d{3,4}p)',
+                    r'(\d{3,4})',
                 ]
                 
                 qualities_found = []
@@ -1031,10 +1019,7 @@ Use `/help` for complete command guide!
                     for match in matches:
                         clean_quality = re.sub(r'[^\d]', '', match)
                         if clean_quality and len(clean_quality) >= 3:
-                            # Ensure it's a valid video quality
-                            quality_num = int(clean_quality)
-                            if quality_num in [240, 360, 480, 720, 1080, 1440, 2160]:
-                                qualities_found.append(f"{clean_quality}p")
+                            qualities_found.append(f"{clean_quality}p")
                 
                 if qualities_found:
                     result['quality'] = qualities_found[0]
@@ -1050,7 +1035,7 @@ Use `/help` for complete command guide!
                         lang_code = match.group(1).lower()
                         lang_map = {
                             'tam': 'Tamil', 'tamil': 'Tamil',
-                            'tel': 'Telugu', 'telugu': 'Telugu',
+                            'tel': 'Telugu', 'telugu': 'Telugu', 
                             'hin': 'Hindi', 'hindi': 'Hindi',
                             'eng': 'English', 'english': 'English',
                             'mal': 'Malayalam', 'malayalam': 'Malayalam',
@@ -1071,7 +1056,7 @@ Use `/help` for complete command guide!
                         result['format_type'] = match.group(1).title()
                         break
     
-                # Title extraction (clean up the filename)
+                # Title extraction
                 title = filename
                 title = re.sub(r'\[\d+p?\]', '', title, flags=re.IGNORECASE)
                 title = re.sub(r'\[S\d+-E\d+\]', '', title, flags=re.IGNORECASE)
@@ -1088,11 +1073,11 @@ Use `/help` for complete command guide!
                 return result
                 
             except Exception as e:
-                logger.error(f"Error parsing filename {url_or_filename}: {e}")
+                logger.error(f"Error parsing filename: {e}")
                 return {
-                    'season': None, 'episode': None, 'quality': None, 
+                    'season': None, 'episode': None, 'quality': None,
                     'title': None, 'language': None, 'format_type': None,
-                    'file_extension': None, 'raw_filename': url_or_filename
+                    'file_extension': None
                 }
     
         try:
@@ -1101,84 +1086,53 @@ Use `/help` for complete command guide!
             quality = args[2] if len(args) > 2 else None
             episode = args[3] if len(args) > 3 else None
             
-            logger.info(f"🎯 Query params: anime_id={anime_id}, season={season}, quality={quality}, episode={episode}")
+            logger.info(f"Query params: anime_id={anime_id}, season={season}, quality={quality}, episode={episode}")
     
-            # Get all episodes for the anime_id
             async with self.db_pool.acquire() as conn:
-                rows = await conn.fetch("SELECT id, url FROM episodes WHERE anime_id = $1", anime_id)
-                logger.info(f"📊 Query returned {len(rows)} rows initially")
+                rows = await conn.fetch("SELECT url FROM episodes WHERE anime_id = $1", anime_id)
+                logger.info(f"Query returned {len(rows)} rows initially")
     
             if not rows:
-                logger.info("❌ No episodes found")
-                await update.message.reply_text(f"❌ No episodes found for anime_id: {anime_id}")
+                logger.info("No episodes found")
+                await update.message.reply_text("No episodes found matching the criteria.")
                 return
     
             # Filter and parse URLs
-            filtered_episodes = []
+            filtered_rows = []
             for row in rows:
                 parsed = parse_video_filename(row['url'])
-                
-                # Apply filters
                 match = True
                 
-                # Season filter
-                if season:
-                    try:
-                        season_num = int(season)
-                        if parsed['season'] != season_num:
-                            match = False
-                    except ValueError:
-                        logger.warning(f"Invalid season format: {season}")
-                
-                # Episode filter
-                if episode:
-                    try:
-                        episode_num = int(episode)
-                        if parsed['episode'] != episode_num:
-                            match = False
-                    except ValueError:
-                        logger.warning(f"Invalid episode format: {episode}")
-                
-                # Quality filter
-                if quality:
-                    quality_with_p = f"{quality.lower()}p" if not quality.lower().endswith('p') else quality.lower()
-                    if parsed['quality'] and parsed['quality'].lower() != quality_with_p:
-                        match = False
+                if season and parsed['season'] != int(season):
+                    match = False
+                if episode and parsed['episode'] != int(episode):
+                    match = False
+                if quality and parsed['quality'] and parsed['quality'].lower() != f"{quality.lower()}p":
+                    match = False
                 
                 if match:
-                    filtered_episodes.append({
-                        'id': row['id'],
+                    filtered_rows.append({
                         'url': row['url'],
                         'parsed': parsed
                     })
     
-            if not filtered_episodes:
-                logger.info("❌ No episodes found after filtering")
-                filter_info = []
-                if season: filter_info.append(f"Season: {season}")
-                if quality: filter_info.append(f"Quality: {quality}")
-                if episode: filter_info.append(f"Episode: {episode}")
-                
-                filter_text = f" with filters ({', '.join(filter_info)})" if filter_info else ""
-                await update.message.reply_text(f"❌ No episodes found for anime_id {anime_id}{filter_text}")
+            if not filtered_rows:
+                logger.info("No episodes found after filtering")
+                await update.message.reply_text("No episodes found matching the criteria.")
                 return
     
-            # Sort episodes by season and episode number
-            def sort_key(ep):
-                season_num = ep['parsed']['season'] or 0
-                episode_num = ep['parsed']['episode'] or 0
-                return (season_num, episode_num)
+            # Sort by episode
+            filtered_rows.sort(key=lambda x: x['parsed']['episode'] or 0)
             
-            filtered_episodes.sort(key=sort_key)
-            
-            # Format response with detailed info
+            # Build response - FIXED: Remove markdown to prevent parsing errors
             response_lines = []
-            response_lines.append(f"🎬 **Found {len(filtered_episodes)} episodes for anime_id {anime_id}:**\n")
+            response_lines.append(f"Found {len(filtered_rows)} episodes for anime_id {anime_id}:")
+            response_lines.append("")
             
-            for i, ep in enumerate(filtered_episodes, 1):
-                parsed = ep['parsed']
+            for i, row in enumerate(filtered_rows):
+                parsed = row['parsed']
                 
-                # Build episode info
+                # Build info string
                 info_parts = []
                 if parsed['season']:
                     info_parts.append(f"S{parsed['season']:02d}")
@@ -1191,50 +1145,52 @@ Use `/help` for complete command guide!
                 if parsed['format_type']:
                     info_parts.append(parsed['format_type'])
                 
-                info_str = f"[{' | '.join(info_parts)}]" if info_parts else ""
-                title = parsed['title'] or "Unknown Title"
+                info_str = f" [{' | '.join(info_parts)}]" if info_parts else ""
+                title = parsed['title'] or "Unknown"
                 
-                # Format: Serial No.) Title [Info] - URL
-                response_lines.append(f"{i:2d}) **{title}** {info_str}")
-                response_lines.append(f"    🔗 `{ep['url']}`")
-                response_lines.append("")  # Empty line for spacing
+                # Simple format without markdown
+                response_lines.append(f"{i+1:2d}) {title}{info_str}")
+                response_lines.append(f"    {row['url']}")
+                response_lines.append("")
             
-            # Join response and handle Telegram message length limit
             response = "\n".join(response_lines)
             
-            # Split response if too long (Telegram limit ~4096 characters)
+            # Handle long messages
             if len(response) > 4000:
+                # Split into chunks
                 chunks = []
+                lines = response.split('\n')
                 current_chunk = ""
                 
-                for line in response_lines:
-                    if len(current_chunk + line + "\n") > 4000:
+                for line in lines:
+                    if len(current_chunk + line + '\n') > 4000:
                         chunks.append(current_chunk)
-                        current_chunk = line + "\n"
+                        current_chunk = line + '\n'
                     else:
-                        current_chunk += line + "\n"
+                        current_chunk += line + '\n'
                 
                 if current_chunk:
                     chunks.append(current_chunk)
                 
-                # Send multiple messages
+                # Send chunks
                 for i, chunk in enumerate(chunks):
                     if i == 0:
-                        await update.message.reply_text(chunk, parse_mode='Markdown')
+                        await update.message.reply_text(chunk)
                     else:
-                        await update.message.reply_text(f"**Continued ({i+1}/{len(chunks)}):**\n\n{chunk}", parse_mode='Markdown')
+                        await update.message.reply_text(f"Continued ({i+1}/{len(chunks)}):\n\n{chunk}")
             else:
-                await update.message.reply_text(response, parse_mode='Markdown')
+                # Send single message - NO parse_mode to avoid entity errors
+                await update.message.reply_text(response)
                 
-            logger.info(f"✅ Successfully sent {len(filtered_episodes)} episodes to user")
+            logger.info(f"Successfully sent {len(filtered_rows)} episodes")
     
         except ValueError as ve:
-            logger.error(f"❌ ValueError: {ve}")
+            logger.error(f"ValueError: {ve}")
             await update.message.reply_text("❌ Invalid input format. anime_id must be a number.")
         except Exception as e:
-            logger.error(f"❌ Error in search_episodes: {e}", exc_info=True)
+            logger.error(f"Error in search_episodes: {e}", exc_info=True)
             await update.message.reply_text(f"❌ Error: {str(e)}")
-
+                
     async def anime_list_command(self, update: Update, context: ContextTypes.DEFAULT_TYPE):
         """Show all anime with IDs"""
         if not self.db_pool:
