@@ -954,7 +954,7 @@ Use `/help` for complete command guide!
         
         if len(args) < 1:
             await update.message.reply_text(
-                "Usage: /search <anime_id> [season] [quality] [episode]\n\n"
+                "Usage: /search_url <anime_id> [season] [quality] [episode]\n\n"
                 "Examples:\n"
                 "• /search 1 (all episodes for anime_id 1)\n"
                 "• /search 1 01 480 (season 01, quality 480p)\n"
@@ -1128,7 +1128,7 @@ Use `/help` for complete command guide!
             
             for i, row in enumerate(filtered_rows):
                 # Simple format: Serial number) URL only
-                response_lines.append(f"{i+1}) {row['url']}")
+                response_lines.append(f"{i+1}. {row['url']}")
             
             response = "\n".join(response_lines)
             
