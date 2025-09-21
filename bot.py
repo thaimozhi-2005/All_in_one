@@ -15,7 +15,7 @@ from datetime import datetime
 from typing import List, Dict, Optional, Tuple
 from urllib.parse import urlparse
 import urllib.parsefrom telegram import Update
-from telegram.ext import ContextTypes
+from telegram import ContextTypes
     
 
 from telegram import Update, BotCommand, InlineKeyboardButton, InlineKeyboardMarkup
