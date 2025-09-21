@@ -13,7 +13,6 @@ import asyncpg
 import logging
 from datetime import datetime
 from typing import List, Dict, Optional, Tuple
-from urllib.parse import urlparse, parse_qs, unquote
 from telegram import Update
 from telegram.ext import ContextTypes
     
