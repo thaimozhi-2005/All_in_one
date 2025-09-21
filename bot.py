@@ -939,19 +939,20 @@ Use `/help` for complete command guide!
             await update.message.reply_text(f"❌ Error: {e}")
 
     async def search_episodes(self, update: Update, context: ContextTypes.DEFAULT_TYPE):
-        """Search for episode URLs by anime_id, season, quality, optional episode using file_name"""
+        """Search for episode URLs by anime_id, optional season, quality, episode parsed from url"""
         logger.info("Entered search_episodes")
         if not update.effective_user:
             logger.warning("Received /search command with no effective user (e.g., from a channel)")
             return
         args = context.args
         logger.info(f"Args received: {args}")
-        if len(args) < 3:  # Requires anime_id, season, quality; episode is optional
+        if len(args) < 1:  # Requires at least anime_id
             await update.message.reply_text(
-                "Usage: /search <anime_id> <season> <quality> [episode]\n\n"
+                "Usage: /search <anime_id> [season] [quality] [episode]\n\n"
                 "Examples:\n"
-                "• /search 1 01 720P (all episodes in season 01, quality 720P)\n"
-                "• /search 1 01 720P 05 (episode 05 in season 01, quality 720P)",
+                "• /search 1 (all episodes for anime_id 1)\n"
+                "• /search 1 01 480 (season 01, quality 480p)\n"
+                "• /search 1 01 480 11 (season 01, episode 11, quality 480p)",
                 parse_mode='Markdown'
             )
             return
@@ -961,30 +962,42 @@ Use `/help` for complete command guide!
             return
         try:
             anime_id = int(args[0])
-            season = args[1]  # e.g., '01'
-            quality = args[2]  # e.g., '720P'
+            season = args[1] if len(args) > 1 else None
+            quality = args[2] if len(args) > 2 else None
             episode = args[3] if len(args) > 3 else None
             logger.info(f"Query params: anime_id={anime_id}, season={season}, quality={quality}, episode={episode}")
     
-            # Construct pattern to match season and optional episode in file_name
-            season_pattern = f"%S{season}E%"
-            if episode:
-                season_pattern = f"%S{season}E{episode}%"
+            # Construct pattern based on provided args
+            pattern = "%"  # Default: match all
+            if season or quality or episode:
+                pattern_parts = []
+                if season:
+                    pattern_parts.append(f"S{season}-E")
+                if episode:
+                    pattern_parts.append(f"E{episode}")
+                if quality:
+                    pattern_parts.append(f"%[{quality}]")
+                pattern = f"%{'_'.join(pattern_parts)}%"
+                if season and len(season) == 1:
+                    pattern = pattern.replace(f"S{season}-E", f"S0{season}-E")  # Pad single-digit season
+                if episode and len(episode) == 1:
+                    pattern = pattern.replace(f"E{episode}", f"E0{episode}")  # Pad single-digit episode
+    
+            logger.info(f"Using pattern: {pattern}")
     
             async with self.db_pool.acquire() as conn:
                 rows = await conn.fetch("""
-                    SELECT url, file_name
+                    SELECT url
                     FROM episodes
                     WHERE anime_id = $1
-                    AND quality = $2
-                    AND file_name ILIKE $3
+                    AND url ILIKE $2
                     ORDER BY CAST(
                         CASE
-                            WHEN file_name ~ 'E(\d+)' THEN SUBSTRING(file_name FROM 'E(\d+)')
-                            ELSE SUBSTRING(file_name FROM '\d+')
+                            WHEN url ~ 'E(\d+)' THEN SUBSTRING(url FROM 'E(\d+)')
+                            ELSE SUBSTRING(url FROM '\d+')
                         END AS INTEGER) ASC
-                """, anime_id, quality, season_pattern)
-                logger.info(f"Query returned {len(rows)} rows: {[row['file_name'] for row in rows]}")
+                """, anime_id, pattern)
+                logger.info(f"Query returned {len(rows)} rows: {[row['url'] for row in rows]}")
             if not rows:
                 logger.info("No episodes found")
                 await update.message.reply_text("No episodes found matching the criteria.")
